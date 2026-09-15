@@ -1,0 +1,27 @@
+{
+  // Nuxt генерирует конфиги только для app/ и server/. Скрипты, фабрики
+  // и тесты без окружения Nuxt живут здесь, иначе они не тайпчекаются вовсе.
+  "extends": "./.nuxt/tsconfig.server.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "types": ["node", "vitest/globals"],
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.scripts.tsbuildinfo"
+  },
+  "include": [
+    // Глобальные типы Nitro: без них автоимпорты (useDrizzle, createError,
+    // defineEventHandler) не видны в файлах, которые тянут server/**.
+    "./.nuxt/types/nitro-nuxt.d.ts",
+    "./.nuxt/types/nitro-imports.d.ts",
+    "scripts/**/*.ts",
+    "tests/unit/**/*.ts",
+    "tests/server/**/*.ts",
+    "tests/factories/**/*.ts",
+    "tests/setup/**/*.ts",
+    "tests/helpers/**/*.ts",
+    "drizzle.config.ts",
+    "server/**/*.ts"
+  ],
+  // .nuxt здесь исключать нельзя: именно там лежат d.ts с автоимпортами.
+  "exclude": ["node_modules", ".output", ".nuxt/dist"]
+}
