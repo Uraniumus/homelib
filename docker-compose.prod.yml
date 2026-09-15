@@ -1,0 +1,65 @@
+# Прод: один VPS, три контейнера. Разворачивается через
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Переменные берутся из .env рядом с этим файлом (см. .env.example).
+
+services:
+  app:
+    build:
+      context: ./webapp
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NITRO_PORT: 3000
+      NITRO_HOST: 0.0.0.0
+      # Миграции применяются при старте контейнера — см. server/plugins/migrate.ts
+      RUN_MIGRATIONS: "true"
+      DATABASE_URL: postgres://homelib:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан}@postgres:5432/homelib
+      NUXT_SESSION_PASSWORD: ${NUXT_SESSION_PASSWORD:?NUXT_SESSION_PASSWORD не задан}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_REGION: ${S3_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "3000"
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: homelib
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан}
+      POSTGRES_DB: homelib
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Порт наружу не открываем: до БД ходит только app по внутренней сети.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homelib -d homelib"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN не задан}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL не задан}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data      # сертификаты Let's Encrypt, терять нельзя
+      - caddyconfig:/config
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
+  caddydata:
+  caddyconfig:

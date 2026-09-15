@@ -1,0 +1,28 @@
+# Caddy сам получает и продлевает сертификат Let's Encrypt для {$DOMAIN}.
+# Ничего настраивать руками не нужно — только чтобы A-запись домена
+# смотрела на этот сервер и порты 80/443 были открыты.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	# Загрузка фото идёт напрямую в объектное хранилище через presigned PUT,
+	# поэтому большие тела через Caddy не ходят. Лимит — предохранитель.
+	request_body {
+		max_size 10MB
+	}
+
+	reverse_proxy app:3000 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 10MB
+			roll_keep 5
+		}
+	}
+}
