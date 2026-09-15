@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Проект мобильный в первую очередь: безопасные отступы под вырезы. */
+@theme {
+  --color-page: var(--ui-bg);
+}
+
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+}

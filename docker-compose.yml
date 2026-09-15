@@ -1,0 +1,81 @@
+# Локальная разработка: только инфраструктура.
+# Само приложение крутится на хосте через `pnpm dev` — так работает HMR.
+#
+#   docker compose up -d              # postgres + postgres-test + minio
+#   docker compose down -v            # снести вместе с данными
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: homelib
+      POSTGRES_PASSWORD: homelib
+      POSTGRES_DB: homelib
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homelib -d homelib"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Отдельный инстанс для тестов: их setup дропает схему,
+  # рабочую БД под это подставлять нельзя. tmpfs — данные не переживают
+  # рестарт, и это ровно то, что нужно.
+  postgres-test:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: homelib
+      POSTGRES_PASSWORD: homelib
+      POSTGRES_DB: homelib_test
+      # Тестовой БД durability не нужна, а так она заметно быстрее.
+      POSTGRES_INITDB_ARGS: "--nosync"
+    command: >
+      postgres -c fsync=off -c full_page_writes=off -c synchronous_commit=off
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homelib -d homelib_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  # S3-совместимое хранилище для фото. На проде заменяется на реальное.
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: homelib
+      MINIO_ROOT_PASSWORD: homelib-secret
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # веб-консоль
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Одноразовый контейнер: заводит бакет и делает его читаемым,
+  # чтобы обложки отдавались по прямой ссылке.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 homelib homelib-secret &&
+      mc mb --ignore-existing local/homelib &&
+      mc anonymous set download local/homelib
+      "
+
+volumes:
+  pgdata:
+  miniodata:
