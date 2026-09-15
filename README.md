@@ -1,128 +1,131 @@
-# Домашняя библиотека
+# Home Library
 
-Multi-user веб-приложение для учёта личной библиотеки: каталог книг с точной
-моделью изданий, экземпляры на полках, выдача «в аренду», читательский дневник
-и шарибельные подборки.
+A multi-user web app for keeping track of a personal book collection: a catalogue
+with a precise model of editions, physical copies on shelves, lending books out,
+a reading diary, and shareable lists.
 
-Продуктовый контекст и обоснование архитектурных решений — в [context.md](context.md).
-Модель данных — в [library_schema.sql](library_schema.sql), она же портирована
-в Drizzle: [webapp/server/database/schema/](webapp/server/database/schema/).
+Product context and the reasoning behind the architectural decisions live in
+[context.md](context.md). The data model is [library_schema.sql](library_schema.sql),
+ported to Drizzle in [webapp/server/database/schema/](webapp/server/database/schema/).
 
-## Стек
+> Both of those documents, and the comments throughout the code, are in Russian.
 
-| Слой | Чем |
+## Stack
+
+| Layer | What |
 |---|---|
-| Фронт и бэк | Nuxt 4 (Vue 3 + Nitro в одной кодовой базе) |
-| UI | Nuxt UI 4 поверх Tailwind |
-| БД | PostgreSQL 17, Drizzle ORM |
-| Сессии | nuxt-auth-utils |
-| Фото | S3-совместимое хранилище, загрузка через presigned PUT |
-| Тесты | Vitest (unit / server / nuxt) |
-| Прод | docker compose: Nuxt + Postgres + Caddy на одном VPS |
+| Front and back | Nuxt 4 (Vue 3 + Nitro in one codebase) |
+| UI | Nuxt UI 4 on top of Tailwind |
+| Database | PostgreSQL 17, Drizzle ORM |
+| Sessions | nuxt-auth-utils |
+| Photos | S3-compatible storage, uploaded via presigned PUT |
+| Tests | Vitest (unit / server / nuxt) |
+| Production | docker compose: Nuxt + Postgres + Caddy on a single VPS |
 
-Всё приложение живёт в [webapp/](webapp/); в корне только то, что нужно для
-разворачивания.
+The whole app lives in [webapp/](webapp/); the repository root holds only what
+is needed to deploy it.
 
-## Быстрый старт
+## Quick start
 
-Нужны Node 22.12+ (проверено на 24.12), pnpm 10 и Docker.
+You need Node 22.12+ (tested on 24.12), pnpm 10, and Docker.
 
 ```bash
-# 1. Инфраструктура: postgres, тестовый postgres и MinIO
+# 1. Infrastructure: postgres, a test postgres, and MinIO
 docker compose up -d
 
-# 2. Зависимости и окружение
+# 2. Dependencies and environment
 cd webapp
 pnpm install
 cp .env.example .env          # NUXT_SESSION_PASSWORD: openssl rand -base64 32
 
-# 3. Схема и фикстуры
+# 3. Schema and fixtures
 pnpm db:migrate
 pnpm db:seed
 
-# 4. Дев-сервер
+# 4. Dev server
 pnpm dev                      # http://localhost:3000
 ```
 
-MinIO поднимается вместе с остальным: API на `:9000`, консоль на
-`:9001` (логин `homelib`, пароль `homelib-secret`), бакет `homelib`
-создаётся автоматически.
+MinIO comes up with everything else: API on `:9000`, console on `:9001`
+(login `homelib`, password `homelib-secret`). The `homelib` bucket is created
+automatically.
 
-## Команды
+## Commands
 
-Все — из `webapp/`.
+All of them run from `webapp/`.
 
-| Команда | Что делает |
+| Command | What it does |
 |---|---|
-| `pnpm dev` | Дев-сервер с HMR |
-| `pnpm build` / `pnpm preview` | Прод-сборка и её локальный запуск |
-| `pnpm typecheck` | `vue-tsc` по всем проектам, включая скрипты и тесты |
+| `pnpm dev` | Dev server with HMR |
+| `pnpm build` / `pnpm preview` | Production build and running it locally |
+| `pnpm typecheck` | `vue-tsc` across every project, scripts and tests included |
 | `pnpm lint` / `pnpm lint:fix` | ESLint |
-| `pnpm db:generate` | Собрать миграцию из диффа схемы |
-| `pnpm db:migrate` | Накатить миграции |
-| `pnpm db:seed` | Залить фикстуры (перед этим чистит все таблицы) |
-| `pnpm db:reset` | Дропнуть схемы public и drizzle целиком (только локально) |
-| `pnpm db:studio` | Drizzle Studio — смотреть данные в браузере |
-| `pnpm test` | Все тесты |
-| `pnpm test:unit` | Только быстрые, без БД |
-| `pnpm test:server` | Только те, что ходят в Postgres |
-| `pnpm test:nuxt` | Только компонентные |
+| `pnpm db:generate` | Build a migration from the schema diff |
+| `pnpm db:migrate` | Apply migrations |
+| `pnpm db:seed` | Load fixtures (truncates every table first) |
+| `pnpm db:reset` | Drop the `public` and `drizzle` schemas entirely (local only) |
+| `pnpm db:studio` | Drizzle Studio — browse the data |
+| `pnpm test` | Every test |
+| `pnpm test:unit` | Only the fast ones, no database |
+| `pnpm test:server` | Only the ones that talk to Postgres |
+| `pnpm test:nuxt` | Only component tests |
 
-## Как устроен код
+## How the code is laid out
 
 ```
 webapp/
-  app/                    ← фронт (Nuxt 4 держит клиентский код здесь)
-    pages/                  файловый роутинг: pages/books/[id].vue → /books/:id
-    components/             автоимпортируются, префикса не нужно
+  app/                    ← front end (Nuxt 4 keeps client code here)
+    pages/                  file-based routing: pages/books/[id].vue → /books/:id
+    components/             auto-imported, no prefix needed
     layouts/
     assets/css/main.css     Tailwind + Nuxt UI
-  server/                 ← бэк (Nitro)
-    api/                    файловый роутинг: api/books.get.ts → GET /api/books
-    utils/                  автоимпортируются в server/**
+  server/                 ← back end (Nitro)
+    api/                    file-based routing: api/books.get.ts → GET /api/books
+    utils/                  auto-imported across server/**
       drizzle.ts              useDrizzle(), tables, createDatabase()
       auth.ts                 requireUser(), getOptionalUser()
-      validation.ts           parseBody(), parseQuery(), общие zod-схемы
+      validation.ts           parseBody(), parseQuery(), shared zod schemas
       collections.ts          assertLocationInCollection()
-      provisioning.ts         что заводится новому пользователю
+      provisioning.ts         what a newly registered user gets
     database/
-      schema/                 ИСТОЧНИК ИСТИНЫ по схеме
-      migrations/             сгенерированный SQL, руками не править
-    plugins/migrate.ts      миграции при старте контейнера на проде
-  scripts/                ← migrate / seed / reset, гоняются через tsx
+      schema/                 SOURCE OF TRUTH for the schema
+      migrations/             generated SQL, never edited by hand
+    plugins/migrate.ts      runs migrations on container start in production
+  scripts/                ← migrate / seed / reset, run through tsx
   tests/
-    unit/                   без БД
-    server/                 с настоящим Postgres
-    nuxt/                   компоненты
+    unit/                   no database
+    server/                 against a real Postgres
+    nuxt/                   components
     factories/              makeUser(), makeCopy(), makeLibrary()
-    setup/                  подготовка тестовой БД
+    setup/                  test database preparation
 ```
 
-### Схема БД
+### The database schema
 
-Правишь TypeScript в `server/database/schema/`, потом:
+Edit the TypeScript in `server/database/schema/`, then:
 
 ```bash
-pnpm db:generate    # drizzle-kit собирает SQL из диффа
-pnpm db:migrate     # накатывает
+pnpm db:generate    # drizzle-kit builds the SQL from the diff
+pnpm db:migrate     # applies it
 ```
 
-Два места, о которых легко забыть:
+Two things that are easy to forget:
 
-- **Триггеры и справочники drizzle-kit не видит.** Он генерирует только DDL
-  таблиц. Функция `touch_updated_at()`, триггеры на неё и строки
-  `identifier_types` живут в ручной миграции
-  `0001_touch_updated_at_and_identifier_types.sql`. Заведёшь новую таблицу с
-  `updated_at` — нужна новая ручная миграция с тем же DO-блоком. Тест
-  `tests/server/schema-invariants.test.ts` ловит такой пропуск и говорит,
-  какой таблице не хватает триггера.
-- **`casing: 'snake_case'`** выставлен в двух местах: `drizzle.config.ts` и
-  `server/utils/drizzle.ts`. Из-за него в TS колонки в camelCase, а в БД — в
-  snake_case, и имена колонок в схеме можно не указывать. Расцепить эти два
-  места нельзя: запросы поедут в колонки, которых нет. Поэтому клиент создаётся
-  только через `createDatabase()`, свой `drizzle()` нигде не зовём.
+- **drizzle-kit cannot see triggers or reference data.** It only generates table
+  DDL. The `touch_updated_at()` function, the triggers that use it, and the
+  `identifier_types` rows live in the hand-written migration
+  `0001_touch_updated_at_and_identifier_types.sql`. Add a new table with an
+  `updated_at` column and you need another hand-written migration with the same
+  DO block. `tests/server/schema-invariants.test.ts` catches that omission and
+  names the table that is missing its trigger.
+- **`casing: 'snake_case'`** is set in two places: `drizzle.config.ts` and
+  `server/utils/drizzle.ts`. It is what lets columns be camelCase in TypeScript
+  and snake_case in the database without naming them twice. The two settings
+  cannot drift apart — queries would start addressing columns that do not
+  exist. That is why the client is only ever built through `createDatabase()`,
+  and `drizzle()` is never called anywhere else.
 
-### Первый серверный роут
+### Your first server route
 
 ```ts
 // server/api/copies/index.post.ts
@@ -135,11 +138,12 @@ const body = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const user = await requireUser(event)          // 401, если не залогинен
-  const input = await parseBody(event, body)     // 422 со списком полей
+  const user = await requireUser(event)          // 401 when not signed in
+  const input = await parseBody(event, body)     // 422 with the offending fields
   const db = useDrizzle()
 
-  // FK не гарантирует, что полка из той же коллекции — проверяем сами
+  // The FK does not guarantee the shelf belongs to the same collection —
+  // that check is ours to make
   await assertLocationInCollection(db, input.locationId, input.collectionId)
 
   const [copy] = await db.insert(tables.copies).values(input).returning()
@@ -147,33 +151,33 @@ export default defineEventHandler(async (event) => {
 })
 ```
 
-`requireUser`, `parseBody`, `useDrizzle`, `tables`, `schemas` и
-`assertLocationInCollection` автоимпортируются — импортировать их не нужно.
+`requireUser`, `parseBody`, `useDrizzle`, `tables`, `schemas`, and
+`assertLocationInCollection` are auto-imported — no import statement needed.
 
-### Тесты
+### Tests
 
-`tests/server/` работают с настоящим Postgres на `:5433`. Схема пересоздаётся
-один раз на прогон, данные чистятся `TRUNCATE` перед каждым тестом, поэтому
-тесты не зависят друг от друга и от порядка запуска.
+`tests/server/` run against a real Postgres on `:5433`. The schema is recreated
+once per run and the data is wiped with `TRUNCATE` before each test, so no test
+depends on another or on the order they run in.
 
 ```ts
 import { makeLibrary } from '../factories'
 import { testDb } from '../setup/database'
 
-it('не даёт выдать один экземпляр дважды', async () => {
-  const { copy, user } = await makeLibrary()   // юзер + коллекция + полка + книга
+it('refuses to lend the same copy twice', async () => {
+  const { copy, user } = await makeLibrary()   // user + collection + shelf + book
   await testDb.insert(tables.loans).values({ copyId: copy.id, borrowerUserId: user.id })
   // ...
 })
 ```
 
-Фабрики в `tests/factories/` создают валидную строку с осмысленными
-значениями по умолчанию: в тесте пишешь только то, что он проверяет.
+The factories in `tests/factories/` build a valid row with sensible defaults, so
+a test only spells out what it is actually checking.
 
-Проверять нарушение констрейнта надо через `expectViolation` из
-`tests/helpers/db-errors.ts`, а не через `rejects.toThrow(/имя/)`: drizzle
-заворачивает ошибку драйвера в `DrizzleQueryError`, у которого в `message`
-лежит только текст запроса. Имя констрейнта — в `cause`.
+Assert constraint violations with `expectViolation` from
+`tests/helpers/db-errors.ts` rather than `rejects.toThrow(/name/)`: Drizzle wraps
+the driver error in a `DrizzleQueryError` whose `message` holds only the query
+text. The constraint name is in `cause`.
 
 ```ts
 await expectViolation(
@@ -182,226 +186,229 @@ await expectViolation(
 )
 ```
 
-## Деплой
+## Deployment
 
-Один VPS, три контейнера: Nuxt, Postgres и Caddy. Caddy сам получает и
-продлевает сертификат Let's Encrypt.
+One VPS, three containers: Nuxt, Postgres, and Caddy. Caddy obtains and renews
+the Let's Encrypt certificate on its own.
 
 ```bash
-# На сервере
+# On the server
 git clone <repo> homelib && cd homelib
-cp webapp/.env.example .env      # .env кладём рядом с docker-compose.prod.yml
+cp webapp/.env.example .env      # .env goes next to docker-compose.prod.yml
 
-# Обязательно заполнить:
-#   POSTGRES_PASSWORD       — придумать длинный
+# Must be filled in:
+#   POSTGRES_PASSWORD       — make it long
 #   NUXT_SESSION_PASSWORD   — openssl rand -base64 32
-#   DOMAIN                  — A-запись должна уже смотреть сюда
-#   ACME_EMAIL              — для уведомлений Let's Encrypt
-#   S3_*                    — реквизиты объектного хранилища
+#   DOMAIN                  — its A record must already point here
+#   ACME_EMAIL              — for Let's Encrypt notifications
+#   S3_*                    — object storage credentials
 
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Миграции накатываются при старте контейнера (`RUN_MIGRATIONS=true`,
-см. `server/plugins/migrate.ts`) — отдельной командой после деплоя ничего
-делать не надо.
+Migrations are applied when the container starts (`RUN_MIGRATIONS=true`, see
+`server/plugins/migrate.ts`), so there is no separate command to remember after
+a deploy.
 
-Обновление:
+To update:
 
 ```bash
 git pull && docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Порт Postgres наружу не открыт: до базы ходит только контейнер приложения по
-внутренней сети.
+The Postgres port is not exposed: only the app container reaches the database,
+over the internal network.
 
-### Бэкапы
+### Backups
 
-Свой `pg_dump` по крону в объектное хранилище (класс Cold) — платный бэкап
-провайдера дороже самого сервера и не переживает смерть провайдера.
-Ещё не настроено, см. «Что дальше».
+A home-grown `pg_dump` on cron into object storage (Cold tier) — a hosting
+provider's managed backup costs more than the server itself and does not survive
+the provider going away. Not set up yet; see stage 8 of the roadmap.
 
-## Роудмап
+## Roadmap
 
-Считаем в экранах: **экран — это страница с роутом** в `app/pages/`. Модалки,
-формы и фильтры внутри страницы отдельно не считаются, серверные роуты под
-экраном — тоже часть экрана. Темп — 5 экранов в неделю.
+Progress is measured in screens, where **a screen is a page with a route** under
+`app/pages/`. Modals, forms, and filters inside a page do not count separately,
+and the server routes behind a screen are part of that screen. The pace is
+5 screens per week.
 
-Не всё меряется экранами: сканер, загрузка фото и сквозная проверка видимости
-экранов почти не добавляют, а времени едят как несколько. Такие куски ниже
-вынесены отдельной строкой, и недели под них заложены.
+Not everything is measured in screens. The barcode scanner, photo uploads, and
+the cross-cutting visibility rules barely add pages but eat the time of several.
+Those are listed on their own line below, with weeks budgeted for them.
 
-### Этап 1. Первый срез: «отсканировала → книга на полке» — неделя 1
+### Stage 1. First slice: "scan a barcode → book on a shelf" — week 1
 
-Сценарий, ради которого продуктом начинают пользоваться.
+The scenario that makes people start using the product.
 
-| Экран | Что делает |
+| Screen | What it does |
 |---|---|
-| `/register`, `/login` | Регистрация и вход по сессии |
-| `/` | Моя полка: список экземпляров |
-| `/scan` | Сканер штрихкода ISBN |
-| `/books/new` | Заведение издания и экземпляра |
+| `/register`, `/login` | Session-based sign-up and sign-in |
+| `/` | My shelf: a list of copies |
+| `/scan` | ISBN barcode scanner |
+| `/books/new` | Create an edition and a copy |
 
-Сверх экранов: сессии на `nuxt-auth-utils`, вызов `provisionNewUser()` при
-регистрации, поиск издания по отсканированному ISBN в `edition_identifiers`.
+Beyond the screens: sessions on `nuxt-auth-utils`, calling `provisionNewUser()`
+at registration, looking up a scanned ISBN in `edition_identifiers`.
 
-Первый роут и первый компонент делаются вместе как образец паттернов —
-поэтому неделя с запасом, дальше темп выравнивается.
+The first route and the first component are built together as a reference for
+the patterns, so this week has slack in it; the pace evens out afterwards.
 
-**Готово, когда:** завела аккаунт, отсканировала книгу, увидела её на полке.
+**Done when:** you can create an account, scan a book, and see it on your shelf.
 
-### Этап 2. MVP: полноценная полка — недели 2–3
+### Stage 2. MVP: a shelf worth using — weeks 2–3
 
-| Экран | Что делает |
+| Screen | What it does |
 |---|---|
-| `/copies/[id]` | Карточка экземпляра |
-| `/copies/[id]/edit` | Состояние, полка, заметки |
-| `/collections` | Список коллекций |
-| `/collections/[id]` | Коллекция с фильтрами |
-| `/collections/[id]/locations` | Управление полками |
-| `/search` | Поиск по каталогу |
-| `/editions/[id]` | Карточка издания |
-| `/editions/[id]/edit` | Издание, идентификаторы, состав, переводчики |
-| `/works/[id]` | Карточка произведения |
-| `/works/[id]/edit` | Произведение и авторы |
+| `/copies/[id]` | Copy detail |
+| `/copies/[id]/edit` | Condition, shelf, notes |
+| `/collections` | List of collections |
+| `/collections/[id]` | A collection with filters |
+| `/collections/[id]/locations` | Managing shelves |
+| `/search` | Catalogue search |
+| `/editions/[id]` | Edition detail |
+| `/editions/[id]/edit` | Edition, identifiers, contents, translators |
+| `/works/[id]` | Work detail |
+| `/works/[id]/edit` | Work and its authors |
 
-Сверх экранов: ручное заведение книги **без ISBN** — советские издания иначе
-в каталог не попадут; дедупликация по `dedupe_key` при заведении издания.
+Beyond the screens: entering a book **without an ISBN** by hand — Soviet editions
+never make it into the catalogue otherwise — and deduplicating on `dedupe_key`
+when an edition is created.
 
-Самый неприятный экран здесь — `/editions/[id]/edit`: в нём живёт
-`edition_works`, то есть сборник (издание → много произведений) и многотомник
-(произведение → много изданий). Заложи на него больше, чем кажется.
+The nastiest screen here is `/editions/[id]/edit`: it is where `edition_works`
+lives, meaning both anthologies (one edition → many works) and multi-volume sets
+(one work → many editions). Budget more for it than it looks like it needs.
 
-**Готово, когда:** любую книгу с полки можно завести, найти и отредактировать —
-включая советскую без ISBN и сборник. С этой точки продуктом можно
-пользоваться каждый день, дальше — расширение.
+**Done when:** any book on the shelf can be entered, found, and edited —
+including a Soviet edition with no ISBN and an anthology. From this point the
+product is usable every day; everything after is expansion.
 
-### Этап 3. Фото — неделя 4
+### Stage 3. Photos — week 4
 
-| Экран | Что делает |
+| Screen | What it does |
 |---|---|
-| `/copies/[id]/photos` | Фото экземпляра: корешок, автограф, дарственная |
-| — | Обложка издания внутри `/editions/[id]/edit` |
+| `/copies/[id]/photos` | Copy photos: spine, autograph, inscription |
+| — | Edition cover, inside `/editions/[id]/edit` |
 
-Экранов мало, недели уйдёт целиком: presigned PUT в обход сервера, сжатие
-до ~300 КБ на клиенте, жёсткий отказ на >10 МБ, счётчик фото на экземпляр.
-Лимиты уже лежат в `runtimeConfig.limits`.
+Few screens, but the week goes entirely: presigned PUT that bypasses the app
+server, client-side compression to ~300 KB, a hard refusal above 10 MB, and a
+per-copy photo counter. The limits already sit in `runtimeConfig.limits`.
 
-**Готово, когда:** фото грузится с телефона и не съедает хранилище.
+**Done when:** a photo uploads from a phone and does not eat the storage budget.
 
-### Этап 4. Аренды — неделя 5
+### Stage 4. Lending — week 5
 
-| Экран | Что делает |
+| Screen | What it does |
 |---|---|
-| `/loans` | Что у кого на руках и что взяла я |
-| `/loans/new` | Выдать экземпляр |
-| `/contacts` | Заёмщики без аккаунта |
-| `/contacts/[id]` | Контакт и история его аренд |
+| `/loans` | Who has what, and what you borrowed |
+| `/loans/new` | Lend a copy out |
+| `/contacts` | Borrowers without an account |
+| `/contacts/[id]` | A contact and their lending history |
 
-Частичный уникальный индекс не даст выдать экземпляр дважды, а CHECK —
-указать двух заёмщиков сразу; оба случая уже покрыты тестами.
+A partial unique index prevents lending the same copy twice, and a CHECK
+prevents naming two borrowers at once; both are already covered by tests.
 
-**Готово, когда:** видно, у кого книга и с какого числа.
+**Done when:** you can see who has a book and since when.
 
-### Этап 5. Читательский дневник — неделя 6
+### Stage 5. Reading diary — week 6
 
-| Экран | Что делает |
+| Screen | What it does |
 |---|---|
-| `/diary` | Отметки: хочу / читаю / прочитано / брошено |
-| `/diary/[id]` | Отметка: даты, оценка, видимость |
-| `/reviews/new` | Написать отзыв |
-| `/reviews/[id]` | Отзыв — первая страница, которую шарят ссылкой |
-| `/reviews/[id]/edit` | Правка отзыва |
+| `/diary` | Marks: want to read / reading / read / abandoned |
+| `/diary/[id]` | A mark: dates, rating, visibility |
+| `/reviews/new` | Write a review |
+| `/reviews/[id]` | A review — the first page people share by link |
+| `/reviews/[id]/edit` | Edit a review |
 
-У отметок нет «текущего статуса» колонкой: перечитывание — это ещё одна
-строка, а актуальный статус — последняя по `created_at`. Сортировать надо
-`created_at DESC, id DESC`: `now()` в Postgres это время транзакции, и без
-тай-брейка по id порядок неоднозначный.
+Marks have no "current status" column: rereading is another row, and the current
+status is the most recent one by `created_at`. Sort by `created_at DESC, id DESC`:
+`now()` in Postgres is transaction time, so without the id tie-break the ordering
+is ambiguous.
 
-**Готово, когда:** можно отметить и прокомментировать книгу, в том числе ту,
-которой нет в коллекции.
+**Done when:** you can mark and comment on a book, including one you do not own.
 
-### Этап 6. Теги и подборки — неделя 7
+### Stage 6. Tags and lists — week 7
 
-| Экран | Что делает |
+| Screen | What it does |
 |---|---|
-| `/tags` | Теги со счётчиками, переименование, слияние |
-| `/lists` | Мои подборки |
-| `/lists/new` | Создать подборку |
-| `/lists/[id]` | Подборка — шарибельная страница |
-| `/lists/[id]/edit` | Состав и порядок |
+| `/tags` | Tags with counts, renaming, merging |
+| `/lists` | My lists |
+| `/lists/new` | Create a list |
+| `/lists/[id]` | A list — a shareable page |
+| `/lists/[id]/edit` | Contents and ordering |
 
-Теги вешаются на разные сущности: жанр — свойство текста (`work_user_tags`),
-«утилизировать» — свойство бумаги (`copy_user_tags`). Пул тегов при этом один.
+Tags attach to different things: a genre belongs to the text (`work_user_tags`),
+"give away" belongs to the paper (`copy_user_tags`). The pool of tags is shared
+between them.
 
-`/lists/[id]` — то место, ради которого выбран Nuxt с SSR: тут нужны og-теги,
-иначе ссылка в мессенджере выглядит пустой.
+`/lists/[id]` is what Nuxt with SSR was chosen for: it needs og tags, or a link
+pasted into a messenger shows up blank.
 
-**Готово, когда:** подборку можно отправить человеку без аккаунта, и она
-нормально развернётся превью.
+**Done when:** a list can be sent to someone without an account and unfurls into
+a proper preview.
 
-### Этап 7. Видимость и соцчасть — недели 8–9
+### Stage 7. Visibility and the social side — weeks 8–9
 
-| Экран | Что делает |
+| Screen | What it does |
 |---|---|
-| `/settings` | Профиль, видимость по умолчанию |
-| `/u/[username]` | Публичный профиль |
-| `/friends` | Друзья и заявки |
-| `/feed` | Лента друзей: отзывы и отметки |
-| `/persons/[id]` | Автор или переводчик |
-| `/publishers/[id]` | Издательство |
+| `/settings` | Profile, default visibility |
+| `/u/[username]` | Public profile |
+| `/friends` | Friends and requests |
+| `/feed` | Friends' feed: reviews and marks |
+| `/persons/[id]` | An author or translator |
+| `/publishers/[id]` | A publisher |
 
-Две недели, потому что основная работа тут сквозная, а не экранная: правило
-`public / friends / private` должно одинаково работать в коллекциях,
-подборках, отметках и отзывах, а `copies.is_hidden` — фильтроваться **до**
-проверки `visibility` коллекции. Это тот случай, когда дешевле сразу писать
-тесты на каждую комбинацию.
+Two weeks, because the real work here is cross-cutting rather than per-screen:
+the `public / friends / private` rule has to behave identically across
+collections, lists, marks, and reviews, and `copies.is_hidden` has to be filtered
+**before** the collection's `visibility` is checked. This is the case where
+writing a test per combination up front is the cheaper path.
 
-**Готово, когда:** чужой человек видит ровно то, что ему открыли, и ни строкой
-больше.
+**Done when:** a stranger sees exactly what was opened to them and not one row
+more.
 
-### Этап 8. PWA и запуск — неделя 10
+### Stage 8. PWA and launch — week 10
 
-| Экран | Что делает |
+| Screen | What it does |
 |---|---|
-| `/about` | Что это и зачем |
-| `/limits` | Тариф и текущий расход |
+| `/about` | What this is and why |
+| `/limits` | Plan and current usage |
 
-Сверх экранов: манифест и офлайн-кэш, установка иконки на телефон, `pg_dump`
-по крону в холодное хранилище, алерт на биллинг, лимит книг и фото на
-бесплатном тарифе.
+Beyond the screens: manifest and offline cache, installing the icon on a phone,
+`pg_dump` on cron into cold storage, a billing alert, and the free-tier limits on
+books and photos.
 
-**Готово, когда:** приложение ставится на телефон с иконкой, а бэкап лежит
-не на том же сервере, что база.
+**Done when:** the app installs on a phone with its own icon, and the backup
+lives somewhere other than the server holding the database.
 
-### Таймлайн
+### Timeline
 
-Отсчёт от недели 7 сентября 2026.
+Counting from the week of 7 September 2026.
 
-| Недели | Этап | Экранов | Готово к |
+| Weeks | Stage | Screens | Done by |
 |---|---|---|---|
-| 1 | Первый срез | 5 | 13 сен |
-| 2–3 | **MVP: полноценная полка** | 10 | **27 сен** |
-| 4 | Фото | 2 | 4 окт |
-| 5 | Аренды | 4 | 11 окт |
-| 6 | Дневник | 5 | 18 окт |
-| 7 | Теги и подборки | 5 | 25 окт |
-| 8–9 | Видимость и соцчасть | 6 | 8 ноя |
-| 10 | PWA и запуск | 2 | **15 ноя** |
+| 1 | First slice | 5 | 13 Sep |
+| 2–3 | **MVP: a shelf worth using** | 10 | **27 Sep** |
+| 4 | Photos | 2 | 4 Oct |
+| 5 | Lending | 4 | 11 Oct |
+| 6 | Reading diary | 5 | 18 Oct |
+| 7 | Tags and lists | 5 | 25 Oct |
+| 8–9 | Visibility and the social side | 6 | 8 Nov |
+| 10 | PWA and launch | 2 | **15 Nov** |
 
-**39 экранов, 10 недель.** Пользоваться каждый день — с 27 сентября,
-полный охват схемы — к 15 ноября.
+**39 screens, 10 weeks.** Usable every day from 27 September; the schema fully
+covered by 15 November.
 
-Оценка исходит из того, что экраны и основные тесты пишешь ты, а
-инфраструктура, краевые тесты и ревью — на мне. Если делать всё одной, смело
-умножай на полтора: на каждый экран приходится серверный роут, а он в
-оценку «5 экранов в неделю» обычно мысленно не попадает.
+The estimate assumes the current split of work: screens and the main tests are
+written by the project owner, while infrastructure, edge-case tests, and review
+are the assistant's. Doing all of it alone, multiply by one and a half — every
+screen carries a server route behind it, and that route rarely makes it into a
+"5 screens a week" estimate.
 
-### Покрытие схемы
+### Schema coverage
 
-Все 24 таблицы разложены по этапам — «дописать потом» не остаётся ничего.
+All 24 tables are assigned to a stage, so nothing is left as "wire it up later".
 
-| Этап | Таблицы |
+| Stage | Tables |
 |---|---|
 | 1 | `users`, `collections`, `locations`, `copies`, `editions`, `works`, `identifier_types`, `edition_identifiers` |
 | 2 | `persons`, `publishers`, `work_contributors`, `edition_contributors`, `edition_works` |
@@ -411,17 +418,18 @@ git pull && docker compose -f docker-compose.prod.yml up -d --build
 | 6 | `user_tags`, `work_user_tags`, `copy_user_tags`, `lists`, `list_items` |
 | 7 | `friendships` |
 
-### За рамками
+### Out of scope
 
-Осознанно отложено, в 10 недель не входит:
+Deliberately deferred; not part of the 10 weeks:
 
-- **Лента с лайками.** Пока это запрос по `reviews` и `book_marks`. Отдельная
-  append-only таблица `activities` заводится позже, когда упрёшься в
-  агрегацию событий.
-- **Составной FK на `locations`.** Сейчас полку из чужой коллекции ловит
-  `assertLocationInCollection()`. Железный вариант через
-  `UNIQUE (collection_id, id)` описан комментарием в схеме.
-- **TWA для Google Play** — вечер работы через Bubblewrap, но только после PWA.
-- **iOS через Capacitor** — последним, сразу с нативными пушами и камерой,
-  иначе риск отклонения по правилу о минимальной функциональности.
-- **Подписка.** Внутри iOS-приложения не продавать — только на сайте.
+- **A feed with likes.** For now that is a query over `reviews` and `book_marks`.
+  A separate append-only `activities` table comes later, once event aggregation
+  becomes the bottleneck.
+- **A composite FK on `locations`.** Right now a shelf from someone else's
+  collection is caught by `assertLocationInCollection()`. The airtight version,
+  via `UNIQUE (collection_id, id)`, is described in a comment in the schema.
+- **TWA for Google Play** — an evening's work with Bubblewrap, but only after
+  the PWA.
+- **An iOS wrapper via Capacitor** — last, and straight away with native push
+  and camera, or it risks rejection under the minimum-functionality rule.
+- **Subscriptions.** Not sold inside the iOS app — website only.
